@@ -2,44 +2,14 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+	"io"
 	"log"
 	"net"
 )
 
-type Client struct {
-	name string
-	conn net.Conn
-}
-
-type Message struct {
-	data   []byte
-	source *Client
-}
-
-type Server struct {
-	clients []*Client
-}
+type Server struct{}
 
 func (s *Server) Serve(l net.Listener) error {
-	s.clients = make([]*Client, 0)
-	messageChan := make(chan *Message)
-	counter := 0
-
-	go func() {
-		for {
-			msg := <-messageChan
-
-			for _, c := range s.clients {
-				if c != msg.source {
-					_, err := fmt.Fprintf(c.conn, "%s: %s", msg.source.name, msg.data)
-					if err != nil {
-						log.Println("unable to write to %s: %s", c.conn.RemoteAddr(), err.Error())
-					}
-				}
-			}
-		}
-	}()
 
 	for {
 		conn, err := l.Accept()
@@ -47,28 +17,17 @@ func (s *Server) Serve(l net.Listener) error {
 			log.Fatal(err)
 		}
 
-		client := &Client{
-			conn: conn,
-			name: fmt.Sprintf("guest%d", counter),
-		}
-
-		counter++
-
-		s.clients = append(s.clients, client)
-		go s.handle(client, messageChan)
+		go s.handle(conn)
 	}
 }
 
-func (s *Server) handle(c *Client, messageChan chan *Message) {
-	log.Println("new connection from", c.conn.RemoteAddr())
+func (s *Server) handle(c net.Conn) {
+	log.Println("New Connection")
 
-	fmt.Fprintln(c.conn, "Welcome %s", c.name)
+	bufRead := bufio.NewReader(c)
 	for {
-		msg, _ := bufio.NewReader(c.conn).ReadString('\n')
-		messageChan <- &Message{
-			data:   []byte(msg),
-			source: c,
-		}
+		msg, _ := bufRead.ReadString('\n')
+		io.WriteString(c, msg)
 	}
 }
 
